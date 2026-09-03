@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Material Consumption 2026 — Full Summary</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">MATERIAL MANAGEMENT</div>
+        <h1>Material Consumption <span>2026</span></h1>
+        <p>Build a clean item-wise summary from your monthly Excel workbook.</p>
+      </div>
+      <div class="status-pill" id="headerStatus"><i></i> Waiting for workbook</div>
+    </header>
+
+    <main>
+      <section class="hero-card" id="uploadSection">
+        <div class="upload-icon">↥</div>
+        <h2>Upload your workbook</h2>
+        <p>Drop an <strong>.xls</strong> or <strong>.xlsx</strong> file here, or browse your computer.</p>
+        <label class="primary-btn upload-btn">
+          Choose Excel File
+          <input id="fileInput" type="file" accept=".xls,.xlsx" hidden>
+        </label>
+        <div class="drop-zone" id="dropZone">Drag & drop your Excel file here</div>
+        <small>Your original workbook is never modified.</small>
+      </section>
+
+      <section id="workspace" class="hidden">
+        <div class="workbook-bar">
+          <div>
+            <div class="eyebrow">WORKBOOK</div>
+            <h2 id="fileName">—</h2>
+          </div>
+          <button class="secondary-btn" id="replaceBtn">Replace workbook</button>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat"><span>Sheets detected</span><strong id="sheetCount">0</strong></div>
+          <div class="stat"><span>Months available</span><strong id="monthCount">0</strong></div>
+          <div class="stat"><span>Unique Part Nos.</span><strong id="partCount">0</strong></div>
+          <div class="stat"><span>Issues</span><strong id="issueCount">0</strong></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="eyebrow">STEP 01</div>
+              <h2>Select months</h2>
+            </div>
+            <button class="text-btn" id="toggleMonths">Select all</button>
+          </div>
+          <div id="monthsGrid" class="months-grid"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="eyebrow">STEP 02</div>
+              <h2>Select Part Nos.</h2>
+              <p class="muted">Every Part No. is shown only once, even if it appears in several months.</p>
+            </div>
+            <div class="selection-actions">
+              <span id="selectionCount">0 selected</span>
+              <button class="text-btn" id="toggleParts">Select all</button>
+              <button class="text-btn" id="clearParts">Clear</button>
+            </div>
+          </div>
+          <div class="search-row">
+            <input id="partSearch" type="search" placeholder="Search Part No. or Part Description...">
+          </div>
+          <div class="parts-toolbar">
+            <span id="visibleCount">0 parts</span>
+            <span>Click a row or checkbox to select</span>
+          </div>
+          <div class="parts-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th class="check-col"><input type="checkbox" id="masterPartCheck"></th>
+                  <th>Part No.</th>
+                  <th>Part Description</th>
+                  <th>UoM</th>
+                  <th>Months Found</th>
+                </tr>
+              </thead>
+              <tbody id="partsBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="eyebrow">STEP 03</div>
+              <h2>Verification</h2>
+              <p class="muted">Checks are run against the workbook before generation.</p>
+            </div>
+            <button class="secondary-btn" id="runChecks">Run checks</button>
+          </div>
+          <div id="verification" class="verification"></div>
+        </div>
+
+        <div class="panel preview-panel">
+          <div class="panel-head">
+            <div>
+              <div class="eyebrow">STEP 04</div>
+              <h2>Generation preview</h2>
+            </div>
+            <span class="preview-badge" id="previewBadge">0 parts · 0 months</span>
+          </div>
+          <div class="preview-wrap">
+            <table>
+              <thead id="previewHead"></thead>
+              <tbody id="previewBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="generate-bar">
+          <div>
+            <strong id="generateSummary">Select parts and months to continue.</strong>
+            <span id="generateSub">The generated file will be a new workbook.</span>
+          </div>
+          <button class="generate-btn" id="generateBtn" disabled>Generate Full Summary <span>→</span></button>
+        </div>
+      </section>
+    </main>
+    <footer>Material Consumption 2026 · Browser-based Excel summarizer</footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
