@@ -32,10 +32,33 @@ $('generateBtn').onclick = generateWorkbook;
 
 async function loadWorkbook(file) {
   try {
-    fileName = file.name;
-    setStatus('Reading workbook…', false);
-    const data = await file.arrayBuffer();
-    workbook = XLSX.read(data, { type:'array', cellDates:true });
+    fileName = file?.name || 'workbook';
+    const ext = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
+    if (!['xls','xlsx'].includes(ext)) throw new Error(`Unsupported file type: .${ext || 'unknown'}`);
+    if (typeof XLSX === 'undefined') throw new Error('Excel parser library did not load. Refresh the page and try again.');
+
+    setStatus(`Reading ${ext.toUpperCase()} workbook…`, false);
+
+    // Use ArrayBuffer when available, with a FileReader fallback for older browsers.
+    let data;
+    if (typeof file.arrayBuffer === 'function') {
+      data = await file.arrayBuffer();
+    } else {
+      data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('The browser could not read the selected file.'));
+        reader.readAsArrayBuffer(file);
+      });
+    }
+    if (!data || data.byteLength === 0) throw new Error('The selected file is empty.');
+
+    // SheetJS supports both legacy BIFF .xls and OOXML .xlsx with type:'array'.
+    workbook = XLSX.read(data, { type:'array', cellDates:true, cellNF:false, cellText:true });
+    if (!workbook || !workbook.SheetNames || !workbook.SheetNames.length) {
+      throw new Error('No worksheets were found in the workbook.');
+    }
+
     parseWorkbook();
     $('fileName').textContent = fileName;
     $('workspace').classList.remove('hidden');
@@ -47,8 +70,9 @@ async function loadWorkbook(file) {
     setStatus('Workbook ready', true);
     renderMonths(); renderParts(); runVerification(); updateUI();
   } catch(err) {
-    console.error(err);
-    alert('Could not read this workbook. Please check that it is a valid .xls or .xlsx file.');
+    console.error('Workbook load failed:', err);
+    const reason = err?.message || String(err);
+    alert(`Could not read “${fileName}”.\n\n${reason}\n\nPlease make sure it is a valid .xls or .xlsx workbook.`);
     setStatus('Workbook error', false);
   }
 }
