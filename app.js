@@ -15,6 +15,7 @@ let selectedParts = new Set();
 let selectedMonths = new Set();
 let conflicts = [];
 let detectedTotals = {};
+let expandedCategories = new Set();
 
 $('fileInput').addEventListener('change', e => {
   if (e.target.files[0]) loadWorkbook(e.target.files[0]);
@@ -78,6 +79,7 @@ function parseWorkbook() {
   conflicts = [];
   detectedTotals = {};
   monthSheets = [];
+  expandedCategories = new Set();
 
   workbook.SheetNames.forEach(sheetName => {
     const key = normalize(sheetName);
@@ -90,7 +92,6 @@ function parseWorkbook() {
     monthSheets.push({ month, sheetName, rows, ...summary });
   });
 
-  // Keep workbook order for detected sheets, but display in Jan-Aug order.
   monthSheets.sort((a,b) => DISPLAY_MONTHS.indexOf(a.month) - DISPLAY_MONTHS.indexOf(b.month));
 
   monthSheets.forEach(ms => {
@@ -123,13 +124,11 @@ function parseWorkbook() {
     if (ms.total != null) detectedTotals[ms.month] = ms.total;
   });
 
-  // default: all detected months and all parts
   selectedMonths = new Set(monthSheets.map(x => x.month));
   selectedParts = new Set([...masterParts.values()].map(x => x.partNo));
 }
 
 function locateSummary(rows, sheetName, month) {
-  // Find the most likely item-wise summary header. Handles merged-looking title rows.
   const headerAliases = {
     partNo:['part no','part number','partno','part #','item code','item no'],
     description:['part description','description','item description','material description','item'],
@@ -148,15 +147,11 @@ function locateSummary(rows, sheetName, month) {
     const score = ['partNo','description','uom','quantity'].reduce((s,f)=>s+(indexes[f]>=0?1:0),0);
     if (indexes.partNo >= 0 && indexes.quantity >= 0 && score >= 3) {
       best = { headerRow:r, indexes };
-      // Prefer a row that occurs after a summary/title marker if available.
       if (texts.some(t => t.includes('item-wise') || t.includes('item wise') || t.includes('summary'))) break;
     }
   }
 
-  if (!best) {
-    // Fallback: search rows for common four-column arrangements.
-    best = { headerRow: -1, indexes: {partNo:0, description:1, uom:2, quantity:3} };
-  }
+  if (!best) best = { headerRow: -1, indexes: {partNo:0, description:1, uom:2, quantity:3} };
 
   const items = [];
   let total = null;
@@ -177,13 +172,11 @@ function locateSummary(rows, sheetName, month) {
       continue;
     }
     if (!pn || !Number.isFinite(numeric(q))) continue;
-    // Avoid transaction-level rows where the detected "Part No." is actually a date/index.
     if (isLikelyTransactionRow(row, best)) continue;
 
     items.push({ partNo:pn, description:d, uom:u, quantity:q });
   }
 
-  // If a summary has duplicate Part Nos. within a month, combine them.
   const combined = new Map();
   items.forEach(x => {
     const k = normalize(x.partNo);
@@ -196,7 +189,6 @@ function locateSummary(rows, sheetName, month) {
 
 function isLikelyTransactionRow(row, best) {
   const nonEmpty = row.filter(v => v !== null && v !== '').length;
-  // This deliberately stays permissive because real summary layouts vary.
   return nonEmpty === 0;
 }
 function numeric(v) {
@@ -215,9 +207,7 @@ function renderMonths() {
   monthSheets.forEach(ms => {
     const div = document.createElement('label');
     div.className = 'month-card ' + (selectedMonths.has(ms.month) ? 'active':'');
-    div.innerHTML = `<input type="checkbox" ${selectedMonths.has(ms.month)?'checked':''}>
-      <span class="month-name">${escapeHtml(ms.month)}</span>
-      <span class="sheet-name">${escapeHtml(ms.sheetName)}</span>`;
+    div.innerHTML = `<input type="checkbox" ${selectedMonths.has(ms.month)?'checked':''}>\n      <span class="month-name">${escapeHtml(ms.month)}</span>\n      <span class="sheet-name">${escapeHtml(ms.sheetName)}</span>`;
     div.onclick = e => {
       e.preventDefault();
       if (selectedMonths.has(ms.month)) selectedMonths.delete(ms.month);
@@ -236,30 +226,85 @@ function filteredParts() {
   return list.filter(p => normalize(p.partNo).includes(q) || normalize(p.description).includes(q));
 }
 
+function getPartCategory(partNo) {
+  const raw = clean(partNo);
+  const normalized = raw.replace(/\s+/g, '').toUpperCase();
+  const match = normalized.match(/^([A-Z][A-Z0-9]*?)(?:[-_]?\d+|[-_])/);
+  if (match && match[1]) return `${match[1]} Set`;
+  const fallback = normalized.match(/^([A-Z]{2,})\d+/);
+  if (fallback && fallback[1]) return `${fallback[1]} Set`;
+  const firstToken = raw.split(/[-_\s]+/)[0];
+  if (/^[A-Za-z]{2,}$/.test(firstToken) && firstToken.length <= 12) return `${firstToken.toUpperCase()} Set`;
+  return 'Other Set';
+}
+
+function groupParts(parts) {
+  const groups = new Map();
+  parts.forEach(p => {
+    const category = getPartCategory(p.partNo);
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push(p);
+  });
+  return [...groups.entries()]
+    .sort((a,b) => a[0].localeCompare(b[0], undefined, {numeric:true, sensitivity:'base'}))
+    .map(([category, items]) => [category, items.sort((a,b) => a.partNo.localeCompare(b.partNo, undefined, {numeric:true, sensitivity:'base'}))]);
+}
+
 function renderParts() {
   const body = $('partsBody');
   const list = filteredParts();
-  $('visibleCount').textContent = `${list.length} part${list.length===1?'':'s'}`;
+  const groups = groupParts(list);
+  $('visibleCount').textContent = `${list.length} part${list.length===1?'':'s'} · ${groups.length} set${groups.length===1?'':'s'}`;
   body.innerHTML = '';
-  list.forEach(p => {
-    const tr = document.createElement('tr');
-    const checked = selectedParts.has(p.partNo);
-    tr.className = checked ? 'selected':'';
-    const months = [...new Set(p.sources)].map(x=>`<span class="tag">${x}</span>`).join('');
-    tr.innerHTML = `<td><input type="checkbox" ${checked?'checked':''}></td>
-      <td><strong>${escapeHtml(p.partNo)}</strong></td>
-      <td>${escapeHtml(p.description || '—')}</td>
-      <td>${escapeHtml(p.uom || '—')}</td>
-      <td><div class="month-tags">${months || '—'}</div></td>`;
-    tr.onclick = e => {
-      if (e.target.tagName === 'INPUT') return;
-      togglePart(p.partNo);
+
+  groups.forEach(([category, items]) => {
+    const categoryId = `category-${normalize(category).replace(/[^a-z0-9]+/g,'-')}`;
+    const expanded = expandedCategories.has(category);
+    const selectedCount = items.filter(p => selectedParts.has(p.partNo)).length;
+    const allSelected = items.length > 0 && selectedCount === items.length;
+    const someSelected = selectedCount > 0 && !allSelected;
+
+    const groupRow = document.createElement('tr');
+    groupRow.className = 'part-category-row';
+    groupRow.innerHTML = `<td class="category-check-cell"><input type="checkbox" aria-label="Select ${escapeHtml(category)}" ${allSelected?'checked':''}></td>
+      <td colspan="4"><div class="category-title"><button type="button" class="category-toggle" aria-expanded="${expanded}" aria-controls="${categoryId}"><span class="category-chevron">${expanded?'▾':'▸'}</span><strong>${escapeHtml(category)}</strong><span class="category-count">${selectedCount}/${items.length}</span></button></div></td>`;
+    const categoryCheck = groupRow.querySelector('input');
+    categoryCheck.indeterminate = someSelected;
+    categoryCheck.onclick = e => {
+      e.stopPropagation();
+      items.forEach(p => allSelected ? selectedParts.delete(p.partNo) : selectedParts.add(p.partNo));
+      renderParts(); updateUI();
     };
-    tr.querySelector('input').onclick = e => { e.stopPropagation(); togglePart(p.partNo); };
-    body.appendChild(tr);
+    groupRow.querySelector('.category-toggle').onclick = e => {
+      e.stopPropagation();
+      if (expanded) expandedCategories.delete(category);
+      else expandedCategories.add(category);
+      renderParts();
+    };
+    body.appendChild(groupRow);
+
+    if (!expanded) return;
+    items.forEach(p => {
+      const tr = document.createElement('tr');
+      const checked = selectedParts.has(p.partNo);
+      tr.id = categoryId;
+      tr.className = checked ? 'selected part-child-row':'';
+      const months = [...new Set(p.sources)].map(x=>`<span class="tag">${x}</span>`).join('');
+      tr.innerHTML = `<td></td><td><strong>${escapeHtml(p.partNo)}</strong></td>
+        <td>${escapeHtml(p.description || '—')}</td>
+        <td>${escapeHtml(p.uom || '—')}</td>
+        <td><div class="month-tags">${months || '—'}</div></td>`;
+      tr.onclick = e => {
+        if (e.target.tagName === 'INPUT') return;
+        togglePart(p.partNo);
+      };
+      body.appendChild(tr);
+    });
   });
-  $('masterPartCheck').checked = list.length > 0 && list.every(p=>selectedParts.has(p.partNo));
-  $('masterPartCheck').indeterminate = list.some(p=>selectedParts.has(p.partNo)) && !$('masterPartCheck').checked;
+
+  const visibleSelected = list.filter(p => selectedParts.has(p.partNo)).length;
+  $('masterPartCheck').checked = list.length > 0 && visibleSelected === list.length;
+  $('masterPartCheck').indeterminate = visibleSelected > 0 && visibleSelected < list.length;
   $('selectionCount').textContent = `${selectedParts.size} selected`;
 }
 
@@ -365,8 +410,6 @@ function generateWorkbook() {
   ];
   ws['!rows'] = [{hpt:24}];
 
-  // Professional cell formatting. SheetJS community edition preserves these fields
-  // in many spreadsheet viewers; Excel will render the values/formulas correctly.
   for (let c=0;c<headers.length;c++) {
     const cell = ws[XLSX.utils.encode_cell({r:0,c})];
     if (cell) cell.s = {font:{bold:true}, fill:{fgColor:{rgb:'EAF1FF'}}, alignment:{vertical:'center'}};
