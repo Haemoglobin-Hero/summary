@@ -1,6 +1,6 @@
-// Keep the workbook's Transaction Description separate from Part Description.
-// The source workbook contains both headers, so the generic description matcher
-// must never see "Transaction Description" as a Part Description candidate.
+// Force the exact source-workbook column mapping before app.js parses rows.
+// Source layout (1-based): B=Part No, D=Transaction Code, E=Transaction Description,
+// F=Quantity, J=Part Description, K=UoM. The summary must use J for Part Description.
 (function () {
   function install() {
     if (!window.XLSX || !XLSX.utils || !XLSX.utils.sheet_to_json) return;
@@ -13,10 +13,25 @@
 
       return result.map(row => {
         if (!Array.isArray(row)) return row;
-        return row.map(cell => {
-          const value = String(cell ?? '').trim().replace(/\s+/g, ' ');
-          return value.toLowerCase() === 'transaction description' ? 'Txn Description' : cell;
-        });
+
+        const normalized = row.map(cell => String(cell ?? '').trim().replace(/\s+/g, ' ').toLowerCase());
+        const isSourceHeader =
+          normalized[1] === 'part no' &&
+          normalized[3] === 'transaction code' &&
+          normalized[4] === 'transaction description' &&
+          normalized[5] === 'quantity' &&
+          normalized[9] === 'part description' &&
+          normalized[10] === 'uom';
+
+        if (isSourceHeader) {
+          // Keep J4 as the ONLY description header visible to the app's matcher.
+          const fixed = row.slice();
+          fixed[4] = 'Txn Description';
+          fixed[9] = 'Part Description';
+          return fixed;
+        }
+
+        return row;
       });
     };
 
