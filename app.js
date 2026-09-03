@@ -92,17 +92,19 @@ function parseWorkbook() {
 }
 
 function locateSummary(rows, sheetName, month) {
+  // Product Description is the authoritative material description in the source workbook.
+  // Do not allow the generic "transaction" header to be mistaken for a description field.
   const headerAliases = {
     partNo:['part no','part number','partno','part #','item code','item no'],
-    description:['part description','description','item description','material description'],
-    transactionCode:['transaction code','transactioncode','transaction cd','trans code','transaction'],
+    description:['product description','part description','material description','item description','description'],
+    transactionCode:['transaction code','transactioncode','transaction cd','trans code'],
     uom:['uom','unit','unit of measure'],
     quantity:['quantity','qty','consumption','consumed quantity']
   };
   let best = null;
   for (let r=0;r<rows.length;r++) {
     const row=rows[r]||[], texts=row.map(normalize), indexes={};
-    for (const [field,aliases] of Object.entries(headerAliases)) indexes[field]=texts.findIndex(t=>aliases.some(a=>t===a || t.includes(a)));
+    for (const [field,aliases] of Object.entries(headerAliases)) indexes[field]=texts.findIndex(t=>aliases.some(a=>t===a));
     const score=['partNo','description','transactionCode','uom','quantity'].reduce((s,f)=>s+(indexes[f]>=0?1:0),0);
     if (indexes.partNo>=0 && indexes.quantity>=0 && score>=3) {
       best={headerRow:r,indexes};
