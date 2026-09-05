@@ -3,9 +3,10 @@ const $ = id => document.getElementById(id);
 const MONTH_ALIASES = {
   Jan: ['jan','january'], Feb:['feb','february'], Mar:['mar','march'],
   Apr:['apr','april'], May:['may'], Jun:['jun','june'],
-  July:['jul','july'], Aug:['aug','august']
+  July:['jul','july'], Aug:['aug','august'], Sep:['sep','sept','september'],
+  Oct:['oct','october'], Nov:['nov','november'], Dec:['dec','december']
 };
-const DISPLAY_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','July','Aug'];
+const DISPLAY_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','July','Aug','Sep','Oct','Nov','Dec'];
 
 let workbook = null;
 let fileName = '';
